@@ -22,6 +22,7 @@ import (
 	"strconv"
 	"io"
 	"path"
+	"html/template"
 )
 
 type Config struct {
@@ -41,13 +42,14 @@ type File440 struct {
 }
 
 var grpidx = 1
+var dirs []string
 
 func main() {
 	fmt.Println("Artana v 1.0 (C) 2017 UMK BANK")
 	fmt.Print("Утилита группировки файлов для архива 440-П. ")
-	fmt.Println("Справка по параметрам: -? или -help")
-//	var fPathSrc = flag.String("src", "E:\\temp\\fns\\test", "Путь к директории для исходных файлов. Пример: \"C:\\temp\\src\"")
-//	var fPathDst = flag.String("dst", "E:\\temp\\fns\\out", "Путь к директории для выгрузки файлов. Пример: \"C:\\temp\\dst\"")
+	fmt.Println("Справка по параметрам: -? или -h")
+	//	var fPathSrc = flag.String("src", "E:\\temp\\fns\\test", "Путь к директории для исходных файлов. Пример: \"C:\\temp\\src\"")
+	//	var fPathDst = flag.String("dst", "E:\\temp\\fns\\out", "Путь к директории для выгрузки файлов. Пример: \"C:\\temp\\dst\"")
 	var fPathSrc = flag.String("src", ".", "Путь к директории для исходных файлов. Пример: \"C:\\temp\\src\"")
 	var fPathDst = flag.String("dst", ".\\out", "Путь к директории для выгрузки файлов. Пример: \"C:\\temp\\dst\"")
 
@@ -66,14 +68,13 @@ func main() {
 
 	// Если директории не существует
 	if _, err := os.Stat(*fPathSrc); os.IsNotExist(err) {
-		log.Fatal("Ошибка директории исходных файлов! (", *fPathSrc,")")
+		log.Fatal("Ошибка директории исходных файлов! (", *fPathSrc, ")")
 	}
 
 	// Если директории не существует
 	/*if _, err := os.Stat(*fPathDst); os.IsNotExist(err) {
 		log.Fatal("Ошибка директории исходных файлов! (", *fPathDst,")")
 	}*/
-
 
 	var cfg = Config{
 		SrcPath:  *fPathSrc,
@@ -88,9 +89,9 @@ func main() {
 	parts := make(map[string]string)
 
 	var masks = []string{"*.xml"}
-	fmt.Println("\nБудут обработаны файлы по следующей маске:",masks,"\n")
-	fmt.Println("Источник: \"",*fPathSrc,"\"")
-	fmt.Println("Назначение: \"",*fPathDst,"\"")
+	fmt.Println("\nБудут обработаны файлы по следующей маске:", masks, "\n")
+	fmt.Println("Источник: \"", *fPathSrc, "\"")
+	fmt.Println("Назначение: \"", *fPathDst, "\"")
 
 	files := artanasub.FindFiles(cfg.SrcPath, masks)
 
@@ -143,7 +144,8 @@ func main() {
 		count = c
 	}
 	fmt.Println(" ГОТОВО!")
-	fmt.Println("\nРабота программы завершена.\nДо новых встреч!")
+
+	GenScript()
 }
 
 // Выгружает данные группы файлов в папки с учетом ограничений maxcount maxsize
@@ -204,6 +206,8 @@ func (c *Config) MakeCopy(file string, grpidx int, mkdir bool) error {
 		if err := artanasub.MakeDir(c.ArcDirDstNow() + "\\" + fmt.Sprintf("%03d", grpidx)); err != nil {
 			return err
 		}
+		// Сохраняем данные о созданных директориях для скрипта постобработки
+		dirs = append(dirs, c.ArcDirDstNow()+"\\"+fmt.Sprintf("%03d", grpidx))
 	}
 
 	f, err := os.Open(file)
@@ -240,4 +244,43 @@ func (c *Config) ArcDirDstNow() string {
 	res += "\\" + fmt.Sprintf("%02d", int(date.Month())) //ММ
 	res += "\\" + fmt.Sprintf("%02d", date.Day())        //ДД
 	return c.DstPath + "\\" + res
+}
+
+// Генерирует скрипт постобработки
+func GenScript() error {
+	//start /wait FcolseOW.exe /@%vrb%\311-unsgn.scr
+
+	cryptosc := `
+; Установить получателей файла
+To 2001941009
+
+; Зашифровать все файлы по маске
+Crypt {{.Path}}\BNP*.xml
+Start
+
+; Завершить работу программы
+Exit`
+
+	// Подготовим данные для шаблона
+	type Folder struct {
+		Path string
+	}
+	var folders []Folder
+	for _, r := range dirs {
+		folders = append(folders, Folder{Path: r})
+	}
+
+	// Шаблон для подстановки данных о пути к файлам в скрипт
+	t := template.Must(template.New("CryptScript").Parse(cryptosc))
+
+	for _, r := range folders {
+		err := t.Execute(os.Stdout, r)
+		if err != nil {
+			log.Println("Ошибка обрабтки шаблона CryptScript:", err)
+		}
+	}
+
+	fmt.Println(dirs)
+
+	return nil
 }
