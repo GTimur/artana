@@ -36,6 +36,7 @@ type Config struct {
 	MaxCount   int    // Максимальное количество файлов в архиве
 	VerbaPath  string // Путь к бинарным файлам verba-ow
 	ScriptPath string // Путь к расположению скрипта постобработки
+	KeyFSR     string // Ключ шифрования ФСР (номер получателя) для скрипта постобработки
 	jsonFile   string
 }
 
@@ -65,6 +66,8 @@ func main() {
 	var fMaxCount = flag.Int("maxcount", 50, "Максимальное количество файлов в архиве. Минимум 1.")
 	var fPathVerba = flag.String("verba", "C:\\Program files\\MDPREI\\Verba-OW", "Путь установки Verba-OW. Пример: \"C:\\Program files\\MDPREI\\Verba-OW")
 	var fPathScript = flag.String("script", ".", "Путь расположения скрипта постобработки. Пример: \"C:\\temp\\script\"")
+	var fKeyFSR = flag.String("keyfsr", "2001941009", "Ключ шифр. по спр. получателей (ФСР) для  в Verba-OW. Пример: 2001941009")
+
 	flag.Parse()
 
 	if strings.Compare(*fPathSrc, "") == 0 || strings.Compare(*fPathDst, "") == 0 {
@@ -74,24 +77,20 @@ func main() {
 		os.Exit(2)
 	}
 
-	if *fMaxSize <= 10 || *fMaxCount <= 1 {
+	if *fMaxSize <= 10 || *fMaxCount <= 1 || len(*fKeyFSR) < 6 {
 		fmt.Println("Ошибка указания параметров обработки:")
 		fmt.Println("MaxSize:", *fMaxSize)
 		fmt.Println("MaxCount:", *fMaxCount)
-		os.Exit(2)
-	}
-
-	if strings.Compare(*fPathSrc, "") == 0 || strings.Compare(*fPathDst, "") == 0 || *fMaxSize <= 10 || *fMaxCount <= 1 {
-		fmt.Println("Ошибка при указании параметров:")
-		fmt.Println("SRC:", *fPathSrc)
-		fmt.Println("DST:", *fPathDst)
-		fmt.Println("MaxSize:", *fMaxSize)
-		fmt.Println("MaxCount:", *fMaxCount)
-		fmt.Println("Verba:", *fPathVerba)
-		fmt.Println("Script:", *fPathScript)
 
 		os.Exit(2)
 	}
+
+	if len(*fKeyFSR) < 6 {
+		fmt.Println("Номер получателя по справочнику ключей шифрования указан неверно:", *fKeyFSR)
+
+		os.Exit(2)
+	}
+	fmt.Println("КлючФСР (VerbaOW):", *fKeyFSR)
 
 	// Если директории не существует
 	if _, err := os.Stat(*fPathSrc); os.IsNotExist(err) {
@@ -110,6 +109,7 @@ func main() {
 		MaxCount:   *fMaxCount,
 		VerbaPath:  *fPathVerba,
 		ScriptPath: *fPathScript,
+		KeyFSR:     *fKeyFSR,
 	}
 
 	// Трансформируем путь вида . в реальный путь
@@ -146,7 +146,6 @@ func main() {
 	if _, err := os.Stat(cfg.ScriptPath); os.IsNotExist(err) {
 		log.Fatal("Неверно указана директория скрипта постобработки! (", cfg.ScriptPath, ")")
 	}
-
 
 	var file440 File440
 	var files440 []File440
@@ -342,7 +341,7 @@ Start
 Exit`
 
 	cryptosc := `; Установить получателей файла
-To 2001941009
+To {{.KeyFSR}}
 
 ; Зашифровать все файлы по маске
 {{range .Paths}}
@@ -359,6 +358,7 @@ Exit`
 		VerbaPath   string
 		ScriptPath  string
 		ScriptDrive string
+		KeyFSR      string
 	}
 
 	var folders Folders
@@ -369,6 +369,7 @@ Exit`
 	folders.ScriptPath = c.ScriptPath
 	folders.VerbaPath = c.VerbaPath
 	folders.ScriptDrive = c.ScriptPath[:1]
+	folders.KeyFSR = c.KeyFSR
 
 	// Шаблон для подстановки данных о пути к файлам в скрипт
 	trename := template.Must(template.New("CryptScript").Parse(renamesc))
