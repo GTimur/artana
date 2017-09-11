@@ -23,14 +23,20 @@ import (
 	"io"
 	"path"
 	"html/template"
+	"io/ioutil"
+	"golang.org/x/text/transform"
+	"golang.org/x/text/encoding/charmap"
+	"bytes"
 )
 
 type Config struct {
-	SrcPath  string // Путь к файлам для обработки
-	DstPath  string // Путь для выгрузки подготовленных файлов
-	MaxSize  int64  // Максимальный размер файлов в архиве (50 МБ = 52428800 Байт)
-	MaxCount int    // Максимальное количество файлов в архиве
-	jsonFile string
+	SrcPath    string // Путь к файлам для обработки
+	DstPath    string // Путь для выгрузки подготовленных файлов
+	MaxSize    int64  // Максимальный размер файлов в архиве (50 МБ = 52428800 Байт)
+	MaxCount   int    // Максимальное количество файлов в архиве
+	VerbaPath  string // Путь к бинарным файлам verba-ow
+	ScriptPath string // Путь к расположению скрипта постобработки
+	jsonFile   string
 }
 
 type File440 struct {
@@ -45,17 +51,35 @@ var grpidx = 1
 var dirs []string
 
 func main() {
-	fmt.Println("Artana v 1.0 (C) 2017 UMK BANK")
-	fmt.Print("Утилита группировки файлов для архива 440-П. ")
-	fmt.Println("Справка по параметрам: -? или -h")
+	fmt.Println("Artana v 1.0a (C) 2017 UMK BANK")
+	fmt.Println("Утилита группировки файлов для архива 440-П. (Помощь: artana.exe -h)")
+	fmt.Println("\nПример запуска:")
+	fmt.Println("artana.exe -src=\"C:\\temp\\src\" -dst=\"C:\\temp\\out\" -verba=\"C:\\Program files\\MDPREI\\Verba-OW\"")
+
 	//	var fPathSrc = flag.String("src", "E:\\temp\\fns\\test", "Путь к директории для исходных файлов. Пример: \"C:\\temp\\src\"")
 	//	var fPathDst = flag.String("dst", "E:\\temp\\fns\\out", "Путь к директории для выгрузки файлов. Пример: \"C:\\temp\\dst\"")
-	var fPathSrc = flag.String("src", ".", "Путь к директории для исходных файлов. Пример: \"C:\\temp\\src\"")
+	var fPathSrc = flag.String("src", "", "Путь к директории для исходных файлов. Пример: \"C:\\temp\\src\"")
 	var fPathDst = flag.String("dst", ".\\out", "Путь к директории для выгрузки файлов. Пример: \"C:\\temp\\dst\"")
 
-	var fMaxSize = flag.Int64("maxsize", 52428800, "Максимальный размер файлов в архиве")
-	var fMaxCount = flag.Int("maxcount", 50, "Максимальное количество файлов в архиве")
+	var fMaxSize = flag.Int64("maxsize", 52428800, "Максимальный размер файлов в архиве (в байтах). Минимум 10.")
+	var fMaxCount = flag.Int("maxcount", 50, "Максимальное количество файлов в архиве. Минимум 1.")
+	var fPathVerba = flag.String("verba", "C:\\Program files\\MDPREI\\Verba-OW", "Путь установки Verba-OW. Пример: \"C:\\Program files\\MDPREI\\Verba-OW")
+	var fPathScript = flag.String("script", ".", "Путь расположения скрипта постобработки. Пример: \"C:\\temp\\script\"")
 	flag.Parse()
+
+	if strings.Compare(*fPathSrc, "") == 0 || strings.Compare(*fPathDst, "") == 0 {
+		fmt.Println("Ошибка указания исходной директории или директории выгрузки:")
+		fmt.Println("SRC:", *fPathSrc)
+		fmt.Println("DST:", *fPathDst)
+		os.Exit(2)
+	}
+
+	if *fMaxSize <= 10 || *fMaxCount <= 1 {
+		fmt.Println("Ошибка указания параметров обработки:")
+		fmt.Println("MaxSize:", *fMaxSize)
+		fmt.Println("MaxCount:", *fMaxCount)
+		os.Exit(2)
+	}
 
 	if strings.Compare(*fPathSrc, "") == 0 || strings.Compare(*fPathDst, "") == 0 || *fMaxSize <= 10 || *fMaxCount <= 1 {
 		fmt.Println("Ошибка при указании параметров:")
@@ -63,25 +87,66 @@ func main() {
 		fmt.Println("DST:", *fPathDst)
 		fmt.Println("MaxSize:", *fMaxSize)
 		fmt.Println("MaxCount:", *fMaxCount)
+		fmt.Println("Verba:", *fPathVerba)
+		fmt.Println("Script:", *fPathScript)
+
 		os.Exit(2)
 	}
 
 	// Если директории не существует
 	if _, err := os.Stat(*fPathSrc); os.IsNotExist(err) {
-		log.Fatal("Ошибка директории исходных файлов! (", *fPathSrc, ")")
+		log.Fatal("Неверно указана директория исходных файлов! (", *fPathSrc, ")")
 	}
 
 	// Если директории не существует
-	/*if _, err := os.Stat(*fPathDst); os.IsNotExist(err) {
-		log.Fatal("Ошибка директории исходных файлов! (", *fPathDst,")")
-	}*/
+	if _, err := os.Stat(*fPathVerba); os.IsNotExist(err) {
+		log.Fatal("Неверно указана директория установки Verba-OW! (", *fPathVerba, ")")
+	}
 
 	var cfg = Config{
-		SrcPath:  *fPathSrc,
-		DstPath:  *fPathDst,
-		MaxSize:  *fMaxSize,
-		MaxCount: *fMaxCount,
+		SrcPath:    *fPathSrc,
+		DstPath:    *fPathDst,
+		MaxSize:    *fMaxSize,
+		MaxCount:   *fMaxCount,
+		VerbaPath:  *fPathVerba,
+		ScriptPath: *fPathScript,
 	}
+
+	// Трансформируем путь вида . в реальный путь
+	if strings.Compare(*fPathScript, ".") == 0 {
+		dir, err := filepath.Abs(filepath.Dir(os.Args[0]))
+		if err != nil {
+			log.Fatal(err)
+		}
+		cfg.ScriptPath = dir
+	}
+	if strings.Compare(*fPathDst, ".") == 0 {
+		dir, err := filepath.Abs(filepath.Dir(os.Args[0]))
+		if err != nil {
+			log.Fatal(err)
+		}
+		cfg.DstPath = dir
+	}
+	if strings.Compare(*fPathSrc, ".") == 0 {
+		dir, err := filepath.Abs(filepath.Dir(os.Args[0]))
+		if err != nil {
+			log.Fatal(err)
+		}
+		cfg.SrcPath = dir
+	}
+	if strings.Compare(*fPathScript, ".") == 0 {
+		dir, err := filepath.Abs(filepath.Dir(os.Args[0]))
+		if err != nil {
+			log.Fatal(err)
+		}
+		cfg.ScriptPath = dir
+	}
+
+	// Если директории не существует
+	if _, err := os.Stat(cfg.ScriptPath); os.IsNotExist(err) {
+		log.Fatal("Неверно указана директория скрипта постобработки! (", cfg.ScriptPath, ")")
+	}
+
 
 	var file440 File440
 	var files440 []File440
@@ -145,7 +210,7 @@ func main() {
 	}
 	fmt.Println(" ГОТОВО!")
 
-	GenScript()
+	cfg.GenScript()
 }
 
 // Выгружает данные группы файлов в папки с учетом ограничений maxcount maxsize
@@ -247,40 +312,147 @@ func (c *Config) ArcDirDstNow() string {
 }
 
 // Генерирует скрипт постобработки
-func GenScript() error {
+func (c *Config) GenScript() error {
 	//start /wait FcolseOW.exe /@%vrb%\311-unsgn.scr
 
-	cryptosc := `
-; Установить получателей файла
+	renamesc := `@echo off
+SET VERBA_PATH="{{.VerbaPath}}"
+SET SCRIPT_DIR="{{.ScriptPath}}"
+{{.ScriptDrive}}:
+CD %SCRIPT_DIR%\FILES
+
+	{{range .Paths}}
+rename {{ . }}\PB*.xml PB*.bak
+rename {{ . }}\*.xml *.vrb
+rename {{ . }}\PB*.bak PB*.xml
+{{end}}
+
+start /wait FcolseOW.exe /@%VERBA_PATH%\sign440.scr
+start /wait FcolseOW.exe /@%VERBA_PATH%\crypt440.scr
+
+exit`
+
+	signsc := `; Подписать все файлы по маске
+{{range .Paths}}
+	Sign {{ . }}\*.*
+{{end}}
+Start
+
+; Завершить работу программы
+Exit`
+
+	cryptosc := `; Установить получателей файла
 To 2001941009
 
 ; Зашифровать все файлы по маске
-Crypt {{.Path}}\BNP*.xml
+{{range .Paths}}
+	Crypt {{ . }}\BNP*.vrb
+{{end}}
 Start
 
 ; Завершить работу программы
 Exit`
 
 	// Подготовим данные для шаблона
-	type Folder struct {
-		Path string
+	type Folders struct {
+		Paths       []string
+		VerbaPath   string
+		ScriptPath  string
+		ScriptDrive string
 	}
-	var folders []Folder
+
+	var folders Folders
+	var strbuffer bytes.Buffer // Используем буфер для конвертации шаблона в CP866 перед выводом в файл
 	for _, r := range dirs {
-		folders = append(folders, Folder{Path: r})
+		folders.Paths = append(folders.Paths, r)
 	}
+	folders.ScriptPath = c.ScriptPath
+	folders.VerbaPath = c.VerbaPath
+	folders.ScriptDrive = c.ScriptPath[:1]
 
 	// Шаблон для подстановки данных о пути к файлам в скрипт
-	t := template.Must(template.New("CryptScript").Parse(cryptosc))
+	trename := template.Must(template.New("CryptScript").Parse(renamesc))
 
-	for _, r := range folders {
-		err := t.Execute(os.Stdout, r)
-		if err != nil {
-			log.Println("Ошибка обрабтки шаблона CryptScript:", err)
-		}
+	// Шаблон для подстановки данных о пути к файлам в скрипт
+	tsign := template.Must(template.New("CryptScript").Parse(signsc))
+
+	// Шаблон для подстановки данных о пути к файлам в скрипт
+	tcrypt := template.Must(template.New("CryptScript").Parse(cryptosc))
+
+	/* frename */
+	frename, err := os.Create("mv.cmd")
+	defer frename.Close()
+	if err != nil {
+		log.Printf("Ошибка создания файла скрипта: %v\n", err)
+		return err
 	}
 
-	fmt.Println(dirs)
+	if err := trename.Execute(&strbuffer, folders); err != nil {
+		log.Println("Ошибка обрабтки шаблона rename:", err)
+	}
+
+	buf, err := ToCP866(strbuffer.String());
+	if err != nil {
+		log.Printf("Ошибка конвертации CP866: %v\n", err)
+		return err
+	}
+	frename.WriteString(buf)
+	strbuffer.Reset()
+	/**/
+
+	/* fsign */
+	fsign, err := os.Create("sign440.sc")
+	defer fsign.Close()
+	if err != nil {
+		log.Printf("Ошибка создания файла скрипта: %v\n", err)
+		return err
+	}
+
+	if err := tsign.Execute(&strbuffer, folders); err != nil {
+		log.Println("Ошибка обрабтки шаблона rename:", err)
+	}
+
+	buf, err = ToCP866(strbuffer.String());
+	if err != nil {
+		log.Printf("Ошибка конвертации CP866: %v\n", err)
+		return err
+	}
+	fsign.WriteString(buf)
+	strbuffer.Reset()
+	/**/
+
+	/* fcrypt */
+	fcrypt, err := os.Create("crypt440.sc")
+	defer fcrypt.Close()
+	if err != nil {
+		log.Printf("Ошибка создания файла скрипта: %v\n", err)
+		return err
+	}
+
+	if err := tcrypt.Execute(&strbuffer, folders); err != nil {
+		log.Println("Ошибка обрабтки шаблона rename:", err)
+	}
+
+	buf, err = ToCP866(strbuffer.String());
+	if err != nil {
+		log.Printf("Ошибка конвертации CP866: %v\n", err)
+		return err
+	}
+	fcrypt.WriteString(buf)
+	strbuffer.Reset()
+	/**/
+	//fmt.Println(dirs)
 
 	return nil
+}
+
+func ToCP866(str string) (string, error) {
+	sr := strings.NewReader(str)
+	tr := transform.NewReader(sr, charmap.CodePage866.NewEncoder())
+	buf, err := ioutil.ReadAll(tr)
+	if err != nil {
+		return "", err
+	}
+
+	return string(buf), err
 }
