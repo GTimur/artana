@@ -364,8 +364,8 @@ pause
 exit`
 
 	signsc := `; Подписать все файлы по маске
-{{range .Paths}}
-	Sign {{ . }}\*.*
+{{range $paths := .Paths}}
+	Sign {{ $paths.Path }}\*.*
 {{end}}
 Start
 
@@ -383,8 +383,8 @@ Exit`
 To {{.KeyFSR}}
 
 ; Зашифровать все файлы по маске
-{{range .Paths}}
-	Crypt {{ . }}\BNP*.vrb
+{{range $paths := .Paths}}
+	Crypt {{ $paths.Path }}\BNP*.vrb
 {{end}}
 Start
 
