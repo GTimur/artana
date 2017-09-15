@@ -53,7 +53,8 @@ var grpidx = 1
 var dirs []string
 
 func main() {
-	fmt.Println("Artana 1.0b (C) 2017 UMK BANK")
+	fmt.Println("Artana 1.0c (C) 2017 UMK BANK")
+
 	fmt.Println("Утилита группировки файлов для архива 440-П. (Помощь: artana.exe -h)")
 	fmt.Println("\nПример запуска:")
 	fmt.Println("artana.exe -src=\"C:\\temp\\src\" -dst=\"C:\\temp\\out\" -verba=\"C:\\Program files\\MDPREI\\Verba-OW\"")
@@ -161,19 +162,26 @@ func main() {
 
 	files := artanasub.FindFiles(cfg.SrcPath, masks)
 
-	// Выбираем номера запросов из имени сообщений для группировки
+	// Выбираем номера запросов из сообщений для группировки
 	for k := range files {
 		if strings.Contains(k, "BVS") {
-			parts[k] = filepath.Base(k)[5:36] // только та часть файла где указано имя запроса ZSV
+			parts[filepath.Base(k)[8:36]] = k // только та часть файла где указано имя запроса ZSV
 		}
+		if strings.Contains(k, "BOS") {
+			parts[filepath.Base(k)[8:36]] = k // только та часть файла где указано имя запроса
+		}
+		if strings.Contains(k, "PB") {
+			parts[filepath.Base(k)[7:35]] = k // только та часть файла где указано имя запроса
+		}
+
 	}
 
 	// Группируем файлы в массиве
 	grpcnt := 0
-	for _, v := range parts {
-		for k := range files {
-			if strings.Contains(k, v) {
-				file440 = File440{File: k, Part: v, Size: artanasub.GetFileSize(k), Grp: grpcnt, Done: false,}
+	for k, _ := range parts {
+		for r := range files {
+			if strings.Contains(r, k) {
+				file440 = File440{File: r, Part: k, Size: artanasub.GetFileSize(r), Grp: grpcnt, Done: false,}
 				files440 = append(files440, file440)
 			}
 		}
@@ -188,7 +196,7 @@ func main() {
 	fmt.Print("\nОБРАБОТКА: ")
 	for g := 0; g < grpcnt; g++ {
 		fmt.Print(".")
-		if size > cfg.MaxSize || count > cfg.MaxCount {
+		if size >= cfg.MaxSize || count >= cfg.MaxCount {
 			//fmt.Println("DEBUG:", size, count)
 			s, c, err := Unload(files440, g, cfg, true, size, count)
 			if err != nil {
@@ -209,7 +217,7 @@ func main() {
 		size = s // собираем общий размер данных
 		count = c
 	}
-	fmt.Println(" ГОТОВО!")
+	fmt.Println(" ГОТОВО! Файлов[",len(files440),"]")
 
 	cfg.GenScript()
 }
@@ -220,7 +228,7 @@ func Unload(files440 []File440, group int, cfg Config, mkdir bool, sizesum int64
 		grpidx += 1
 	}
 
-	// Выгружаем сначала BVS файл
+	// Выгружаем в группе первым BVS файл
 	for i := range files440 {
 		if files440[i].Grp == group && !files440[i].Done && strings.Contains(path.Base(files440[i].File), "BVS") {
 
@@ -236,7 +244,7 @@ func Unload(files440 []File440, group int, cfg Config, mkdir bool, sizesum int64
 		}
 	}
 
-	// Выгружаем остальные файлы
+	// Выгружаем остальные файлы группы
 	for i := range files440 {
 		if files440[i].Grp == group && !files440[i].Done {
 
