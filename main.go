@@ -49,11 +49,11 @@ type File440 struct {
 	Done bool   // признак обработки файла
 }
 
-var grpidx = 1
+var GRPIDX = 0
 var dirs []string
 
 func main() {
-	fmt.Println("Artana 1.0c (C) 2017 UMK BANK")
+	fmt.Println("Artana 1.01 (C) 2017 UMK BANK")
 
 	fmt.Println("Утилита группировки файлов для архива 440-П. (Помощь: artana.exe -h)")
 	fmt.Println("\nПример запуска:")
@@ -150,6 +150,13 @@ func main() {
 		log.Fatal("Неверно указана директория скрипта постобработки! (", cfg.ScriptPath, ")")
 	}
 
+	// Удаляем все данные в выходной директории
+	fmt.Print("\nОчищаем:", cfg.ArcDirDstNow())
+	if err := os.RemoveAll(cfg.ArcDirDstNow()); err != nil {
+		log.Fatal("Ошибка при отчистке выходной директории! (", cfg.ArcDirDstNow(), ")")
+	}
+	fmt.Println(" - [Готово!]")
+
 	var file440 File440
 	var files440 []File440
 
@@ -217,7 +224,7 @@ func main() {
 		size = s // собираем общий размер данных
 		count = c
 	}
-	fmt.Println(" ГОТОВО! Файлов[",len(files440),"]")
+	fmt.Println(" ГОТОВО! Файлов[", len(files440), "]")
 
 	cfg.GenScript()
 }
@@ -225,14 +232,14 @@ func main() {
 // Выгружает данные группы файлов в папки с учетом ограничений maxcount maxsize
 func Unload(files440 []File440, group int, cfg Config, mkdir bool, sizesum int64, count int) (int64, int, error) {
 	if mkdir {
-		grpidx += 1
+		GRPIDX += 1
 	}
 
 	// Выгружаем в группе первым BVS файл
 	for i := range files440 {
 		if files440[i].Grp == group && !files440[i].Done && strings.Contains(path.Base(files440[i].File), "BVS") {
 
-			if err := cfg.MakeCopy(files440[i].File, grpidx, mkdir); err != nil {
+			if err := cfg.MakeCopy(files440[i].File, GRPIDX, mkdir); err != nil {
 				log.Printf("Unload: MakeCopy: %v\n", err)
 				return 0, 0, err
 			}
@@ -250,13 +257,13 @@ func Unload(files440 []File440, group int, cfg Config, mkdir bool, sizesum int64
 
 			//Если файлов слишком много или размер привышает лимит
 			if sizesum >= cfg.MaxSize || count >= cfg.MaxCount {
-				grpidx += 1
+				GRPIDX += 1
 				sizesum = 0
 				count = 0
 				mkdir = true
 			}
 
-			if err := cfg.MakeCopy(files440[i].File, grpidx, mkdir); err != nil {
+			if err := cfg.MakeCopy(files440[i].File, GRPIDX, mkdir); err != nil {
 				log.Printf("Unload: MakeCopy: %v\n", err)
 				return 0, 0, err
 			}
@@ -384,7 +391,7 @@ To {{.KeyFSR}}
 
 ; Зашифровать все файлы по маске
 {{range $paths := .Paths}}
-	Crypt {{ $paths.Path }}\BNP*.vrb
+	Crypt {{ $paths.Path }}\*.vrb
 {{end}}
 Start
 
