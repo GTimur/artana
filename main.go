@@ -11,22 +11,23 @@
 package main
 
 import (
+	"artana/artanasub"
+	"bytes"
 	"flag"
 	"fmt"
-	"artana/artanasub"
+	"html/template"
+	"io"
+	"io/ioutil"
 	"log"
 	"os"
-	"strings"
-	"path/filepath"
-	"time"
-	"strconv"
-	"io"
 	"path"
-	"html/template"
-	"io/ioutil"
-	"golang.org/x/text/transform"
+	"path/filepath"
+	"strconv"
+	"strings"
+	"time"
+
 	"golang.org/x/text/encoding/charmap"
-	"bytes"
+	"golang.org/x/text/transform"
 )
 
 type Config struct {
@@ -53,7 +54,7 @@ var GRPIDX = 0
 var dirs []string
 
 func main() {
-	fmt.Println("Artana 1.01 (C) 2017 UMK BANK")
+	fmt.Println("Artana 1.04 (C) 2017 UMK BANK")
 
 	fmt.Println("Утилита группировки файлов для архива 440-П. (Помощь: artana.exe -h)")
 	fmt.Println("\nПример запуска:")
@@ -89,10 +90,10 @@ func main() {
 	}
 
 	if len(*fKeyFSR) < 6 {
-		fmt.Println("Номер получателя по справочнику ключей шифрования указан неверно:", *fKeyFSR)
+		fmt.Println("Номер получателя по справочнику ключей шифрования указан неверно: ", *fKeyFSR)
 		os.Exit(2)
 	}
-	fmt.Println("КлючФСР (VerbaOW):", *fKeyFSR)
+	fmt.Println("КлючФСР (VerbaOW): ", *fKeyFSR)
 
 	// Если директории не существует
 	if _, err := os.Stat(*fPathSrc); os.IsNotExist(err) {
@@ -151,7 +152,7 @@ func main() {
 	}
 
 	// Удаляем все данные в выходной директории
-	fmt.Print("\nОчищаем:", cfg.ArcDirDstNow())
+	fmt.Print("\nОчищаем: ", cfg.ArcDirDstNow())
 	if err := os.RemoveAll(cfg.ArcDirDstNow()); err != nil {
 		log.Fatal("Ошибка при отчистке выходной директории! (", cfg.ArcDirDstNow(), ")")
 	}
@@ -163,7 +164,7 @@ func main() {
 	parts := make(map[string]string)
 
 	var masks = []string{"*.xml"}
-	fmt.Println("\nБудут обработаны файлы по следующей маске:", masks, "\n")
+	fmt.Println("\nБудут обработаны файлы по следующей маске: ", masks, "\n")
 	fmt.Println("Источник: \"", *fPathSrc, "\"")
 	fmt.Println("Назначение: \"", *fPathDst, "\"")
 
@@ -188,7 +189,7 @@ func main() {
 	for k, _ := range parts {
 		for r := range files {
 			if strings.Contains(r, k) {
-				file440 = File440{File: r, Part: k, Size: artanasub.GetFileSize(r), Grp: grpcnt, Done: false,}
+				file440 = File440{File: r, Part: k, Size: artanasub.GetFileSize(r), Grp: grpcnt, Done: false}
 				files440 = append(files440, file440)
 			}
 		}
@@ -205,6 +206,10 @@ func main() {
 		fmt.Print(".")
 		if size >= cfg.MaxSize || count >= cfg.MaxCount {
 			//fmt.Println("DEBUG:", size, count)
+			// Елси предел достигнут - обнуляем счетчики
+			// и выгружаем следующий файл в новый каталог
+			size = 0
+			count = 0
 			s, c, err := Unload(files440, g, cfg, true, size, count)
 			if err != nil {
 				log.Fatal(err)
@@ -357,7 +362,7 @@ xcopy /s /y "C:\Program Files\CONEXANT\K\sh1\*.*" b:\
 start /wait FcolseOW.exe /@%SCRIPT_DIR%\crypt440.sc
 
 REM ADD TO ARJ ARCHIVE
-CD %SCRIPT_DIR%\ARJ
+CD %SCRIPT_DIR%\..\ARJ
 
 {{range $paths := .Paths}}arj32.exe a -e AFN_0349830_MIFNS00_%NOW%_{{ $paths.Number }}.ARJ {{ $paths.Path }}\*.*
 {{end}}
@@ -448,7 +453,7 @@ Exit`
 		log.Println("Ошибка обрабтки шаблона rename:", err)
 	}
 
-	buf, err := ToCP866(strbuffer.String());
+	buf, err := ToCP866(strbuffer.String())
 	if err != nil {
 		log.Printf("Ошибка конвертации CP866: %v\n", err)
 		return err
@@ -469,7 +474,7 @@ Exit`
 		log.Println("Ошибка обрабтки шаблона rename:", err)
 	}
 
-	buf, err = ToCP866(strbuffer.String());
+	buf, err = ToCP866(strbuffer.String())
 	if err != nil {
 		log.Printf("Ошибка конвертации CP866: %v\n", err)
 		return err
@@ -490,7 +495,7 @@ Exit`
 		log.Println("Ошибка обрабтки шаблона rename:", err)
 	}
 
-	buf, err = ToCP866(strbuffer.String());
+	buf, err = ToCP866(strbuffer.String())
 	if err != nil {
 		log.Printf("Ошибка конвертации CP866: %v\n", err)
 		return err
@@ -511,7 +516,7 @@ Exit`
 		log.Println("Ошибка обрабтки шаблона rename:", err)
 	}
 
-	buf, err = ToCP866(strbuffer.String());
+	buf, err = ToCP866(strbuffer.String())
 	if err != nil {
 		log.Printf("Ошибка конвертации CP866: %v\n", err)
 		return err
