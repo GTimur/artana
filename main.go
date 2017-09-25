@@ -385,7 +385,7 @@ Start
 Exit`
 
 	signarj := `; Подписать все файлы по маске
-Sign {{.ScriptPath}}\ARJ\*.arj
+Sign {{.ScriptPath}}\..\ARJ\*.arj
 Start
 
 ; Завершить работу программы

@@ -16,6 +16,6 @@ del /s/q %SCRIPT_DIR%\ARJ
 cls
 cd %SCRIPT_DIR%\ZDATA
 artana.exe -src="%SCRIPT_DIR%\files" -dst="%SCRIPT_DIR%\OUT" -verba="C:\temp" -keyfsr="7020942009" -findex=1
-start /wait /b %SCRIPT_DIR%\ZDATA\mv.cmd
+%SCRIPT_DIR%\ZDATA\mv.cmd
 pause
 

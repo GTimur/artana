@@ -36,3 +36,4 @@
 	del /s/q %SCRIPT_DIR%\ARJ
 	cls
 	artana.exe -src="%SCRIPT_DIR%\files" -dst="%SCRIPT_DIR%\OUT" -verba="C:\temp" -keyfsr="7020942009" -findex=1
+	%SCRIPT_DIR%\ZDATA\mv.cmd
