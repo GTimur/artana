@@ -1,0 +1,7 @@
+; îçë
+[General]
+Number=1
+[Recipient1]
+;FNS
+Type=KeyId
+Value=111111111111

@@ -15,8 +15,6 @@
 		Путь к директории для выгрузки файлов. Пример: "C:\temp\dst" (default ".\\out")
 	-findex int
 	        Начальный номер ARJ-архива. Минимум 1. (default 1)
-	-keyfsr string
-	        Ключ шифр. по спр. получателей (ФСР) для  в Verba-OW. Пример: 2001941009 (default "7020942009")
 	-maxcount int
 	        Максимальное количество файлов в архиве. Минимум 1. (default 50)
 	-maxsize int
@@ -25,8 +23,8 @@
 	        Путь расположения скрипта постобработки. Пример: "C:\temp\script" (default ".")
 	-src string
 	        Путь к директории для исходных файлов. Пример: "C:\temp\src"
-	-verba string
-	        Путь установки Verba-OW. (default "C:\\Program Files\\MDPREI\\РМП Верба-OW")
+	-signatura string
+	        Путь установки СКЗИ Сигнатура. (default "C:\\Program Files\\MDPREI\\spki")
 
 Пример использования:
 
@@ -35,5 +33,5 @@
 	CD %SCRIPT_DIR%
 	del /s/q %SCRIPT_DIR%\ARJ
 	cls
-	artana.exe -src="%SCRIPT_DIR%\files" -dst="%SCRIPT_DIR%\OUT" -verba="C:\temp" -keyfsr="7020942009" -findex=1
+	artana.exe -src="%SCRIPT_DIR%\files" -dst="%SCRIPT_DIR%\OUT" -signatura="C:\temp" -findex=1
 	%SCRIPT_DIR%\ZDATA\mv.cmd

@@ -35,7 +35,7 @@ type Config struct {
 	DstPath    string // Путь для выгрузки подготовленных файлов
 	MaxSize    int64  // Максимальный размер файлов в архиве (50 МБ = 52428800 Байт)
 	MaxCount   int    // Максимальное количество файлов в архиве
-	VerbaPath  string // Путь к бинарным файлам verba-ow
+	SignPath   string // Путь к бинарным файлам Сигнатуры
 	ScriptPath string // Путь к расположению скрипта постобработки
 	KeyFSR     string // Ключ шифрования ФСР (номер получателя) для скрипта постобработки
 	FileIndex  int    // Начальное значение счетчика файлов ARJ
@@ -54,22 +54,20 @@ var GRPIDX = 0
 var dirs []string
 
 func main() {
-	fmt.Println("Artana 1.04 (C) 2017 UMK BANK")
+	fmt.Println("Artana 1.10 (C) 2019 UMK BANK")
 
 	fmt.Println("Утилита группировки файлов для архива 440-П. (Помощь: artana.exe -h)")
 	fmt.Println("\nПример запуска:")
-	fmt.Println("artana.exe -src=\"C:\\temp\\src\" -dst=\"C:\\temp\\out\" -verba=\"C:\\Program files\\MDPREI\\Verba-OW\"")
+	fmt.Println("artana.exe -src=\"C:\\temp\\src\" -dst=\"C:\\temp\\out\" -signatura=\"C:\\Program Files\\MDPREI\\spki\"")
 
 	//	var fPathSrc = flag.String("src", "E:\\temp\\fns\\test", "Путь к директории для исходных файлов. Пример: \"C:\\temp\\src\"")
 	//	var fPathDst = flag.String("dst", "E:\\temp\\fns\\out", "Путь к директории для выгрузки файлов. Пример: \"C:\\temp\\dst\"")
 	var fPathSrc = flag.String("src", "", "Путь к директории для исходных файлов. Пример: \"C:\\temp\\src\"")
 	var fPathDst = flag.String("dst", ".\\out", "Путь к директории для выгрузки файлов. Пример: \"C:\\temp\\dst\"")
-
+	var fPathSignatura = flag.String("signatura", "C:\\Program Files\\MDPREI\\spki", "Путь установки СКЗИ Сигнатура.")
 	var fMaxSize = flag.Int64("maxsize", 52428800, "Максимальный размер файлов в архиве (в байтах). Минимум 10.")
 	var fMaxCount = flag.Int("maxcount", 50, "Максимальное количество файлов в архиве. Минимум 1.")
-	var fPathVerba = flag.String("verba", "C:\\Program Files\\MDPREI\\РМП Верба-OW", "Путь установки Verba-OW.")
 	var fPathScript = flag.String("script", ".", "Путь расположения скрипта постобработки. Пример: \"C:\\temp\\script\"")
-	var fKeyFSR = flag.String("keyfsr", "7020942009", "Ключ шифр. по спр. получателей (ФСР) для  в Verba-OW. Пример: 2001941009")
 	var fFileIndex = flag.Int("findex", 1, "Начальный номер ARJ-архива. Минимум 1.")
 
 	flag.Parse()
@@ -89,30 +87,24 @@ func main() {
 		os.Exit(2)
 	}
 
-	if len(*fKeyFSR) < 6 {
-		fmt.Println("Номер получателя по справочнику ключей шифрования указан неверно: ", *fKeyFSR)
-		os.Exit(2)
-	}
-	fmt.Println("КлючФСР (VerbaOW): ", *fKeyFSR)
-
 	// Если директории не существует
 	if _, err := os.Stat(*fPathSrc); os.IsNotExist(err) {
 		log.Fatal("Неверно указана директория исходных файлов! (", *fPathSrc, ")")
 	}
 
-	// Если директории не существует
-	if _, err := os.Stat(*fPathVerba); os.IsNotExist(err) {
-		log.Fatal("Неверно указана директория установки Verba-OW! (", *fPathVerba, ")")
+        // Если директории не существует
+	if _, err := os.Stat(*fPathSignatura); os.IsNotExist(err) {
+		log.Fatal("Неверно указана директория установки Signatura! (", *fPathSignatura, ")")
 	}
+
 
 	var cfg = Config{
 		SrcPath:    *fPathSrc,
 		DstPath:    *fPathDst,
 		MaxSize:    *fMaxSize,
 		MaxCount:   *fMaxCount,
-		VerbaPath:  *fPathVerba,
+		SignPath:   *fPathSignatura,
 		ScriptPath: *fPathScript,
-		KeyFSR:     *fKeyFSR,
 		FileIndex:  *fFileIndex,
 	}
 
@@ -138,13 +130,14 @@ func main() {
 		}
 		cfg.SrcPath = dir
 	}
-	if strings.Compare(*fPathVerba, ".") == 0 {
+	if strings.Compare(*fPathSignatura, ".") == 0 {
 		dir, err := filepath.Abs(filepath.Dir(os.Args[0]))
 		if err != nil {
 			log.Fatal(err)
 		}
-		cfg.ScriptPath = dir
+		cfg.SignPath = dir
 	}
+
 
 	// Если директории не существует
 	if _, err := os.Stat(cfg.ScriptPath); os.IsNotExist(err) {
@@ -163,7 +156,7 @@ func main() {
 
 	parts := make(map[string]string)
 
-	var masks = []string{"*.xml"}
+	var masks = []string{"*.xml","*.vrb"}
 	fmt.Println("\nБудут обработаны файлы по следующей маске: ", masks, "\n")
 	fmt.Println("Источник: \"", *fPathSrc, "\"")
 	fmt.Println("Назначение: \"", *fPathDst, "\"")
@@ -334,74 +327,37 @@ func (c *Config) ArcDirDstNow() string {
 
 // Генерирует скрипт постобработки
 func (c *Config) GenScript() error {
-	// "C:\Program Files\MDPREI\РМП Верба-OW\FColseOW.exe"
-	//start /wait FcolseOW.exe /@%vrb%\311-unsgn.scr
-
 	renamesc := `@echo off
-SET VERBA_PATH="{{.VerbaPath}}"
-SET PATH=%VERBA_PATH%;%PATH%
+SET SIGNATURA_PATH="{{.SignPath}}"
+SET PATH=%SIGNATURA_PATH%;%PATH%
 set NOW=%date:~6,4%%date:~3,2%%date:~0,2%
 SET SCRIPT_DIR="{{.ScriptPath}}"
+SET ARJPATH=%SCRIPT_DIR%\..\ARJ
 {{.ScriptDrive}}:
-CD %SCRIPT_DIR%\FILES
-
-{{range $paths := .Paths}}
-rename {{ $paths.Path }}\PB*.xml PB*.bak
-rename {{ $paths.Path }}\*.xml *.vrb
-rename {{ $paths.Path }}\PB*.bak PB*.xml
-{{end}}
-
-REM INSERT KA
-rmdir /S /Q  B:\
-xcopy /s /y "C:\Program Files\CONEXANT\K\ka\*.*" b:\
-start /wait FcolseOW.exe /@%SCRIPT_DIR%\sign440.sc
-
-REM INSERT CX1
-rmdir /S /Q  B:\
-xcopy /s /y "C:\Program Files\CONEXANT\K\sh1\*.*" b:\
-start /wait FcolseOW.exe /@%SCRIPT_DIR%\crypt440.sc
 
 REM ADD TO ARJ ARCHIVE
-CD %SCRIPT_DIR%\..\ARJ
+CD %SCRIPT_DIR%\..\TMP
 
 {{range $paths := .Paths}}arj32.exe a -e AFN_0349830_MIFNS00_%NOW%_{{ $paths.Number }}.ARJ {{ $paths.Path }}\*.*
 {{end}}
 
-REM INSERT KA
-rmdir /S /Q  B:\
-xcopy /s /y "C:\Program Files\CONEXANT\K\ka\*.*" b:\
-start /wait FcolseOW.exe /@%SCRIPT_DIR%\signarj.sc
+REM ***** SETTING SIGN IN TMP FOLDER
+
+@dir *.arj /b > list
+
+for /F %%i in (list) do (
+spki1utl.exe -registry -profile FOIV2019 -silent %LOG%\foiv-440p-sign.log  -sign -data %%i -out %ARJPATH%\%%i
+SET erFile = %%i
+IF NOT EXIST %%i GOTO ERR
+@del %%i
+)
+
+ECHO АРХИВЫ БЫЛИ СОЗДАНЫ
+ECHO АРХИВЫ БЫЛИ ПОДПИСАНЫ КА
+ECHO ДО НОВЫХ ВСТРЕЧ!
 
 pause
 exit`
-
-	signsc := `; Подписать все файлы по маске
-{{range $paths := .Paths}}
-	Sign {{ $paths.Path }}\*.*
-{{end}}
-Start
-
-; Завершить работу программы
-Exit`
-
-	signarj := `; Подписать все файлы по маске
-Sign {{.ScriptPath}}\..\ARJ\*.arj
-Start
-
-; Завершить работу программы
-Exit`
-
-	cryptosc := `; Установить получателей файла
-To {{.KeyFSR}}
-
-; Зашифровать все файлы по маске
-{{range $paths := .Paths}}
-	Crypt {{ $paths.Path }}\*.vrb
-{{end}}
-Start
-
-; Завершить работу программы
-Exit`
 
 	type Path struct {
 		Path   string
@@ -411,10 +367,9 @@ Exit`
 	// Подготовим данные для шаблона
 	type Folders struct {
 		Paths       []Path
-		VerbaPath   string
+		SignPath    string
 		ScriptPath  string
 		ScriptDrive string
-		KeyFSR      string
 	}
 
 	var folders Folders
@@ -425,21 +380,11 @@ Exit`
 		folders.Paths = append(folders.Paths, path)
 	}
 	folders.ScriptPath = c.ScriptPath
-	folders.VerbaPath = c.VerbaPath
 	folders.ScriptDrive = c.ScriptPath[:1]
-	folders.KeyFSR = c.KeyFSR
+	folders.SignPath = c.SignPath
 
 	// Шаблон для подстановки данных о пути к файлам в скрипт
 	trename := template.Must(template.New("CryptScript").Parse(renamesc))
-
-	// Шаблон для подстановки данных о пути к файлам в скрипт
-	tsign := template.Must(template.New("CryptScript").Parse(signsc))
-
-	// Шаблон для подстановки данных о пути к файлам в скрипт
-	tsignarj := template.Must(template.New("CryptScript").Parse(signarj))
-
-	// Шаблон для подстановки данных о пути к файлам в скрипт
-	tcrypt := template.Must(template.New("CryptScript").Parse(cryptosc))
 
 	/* frename */
 	frename, err := os.Create("mv.cmd")
@@ -459,69 +404,6 @@ Exit`
 		return err
 	}
 	frename.WriteString(buf)
-	strbuffer.Reset()
-	/**/
-
-	/* fsign */
-	fsign, err := os.Create("sign440.sc")
-	defer fsign.Close()
-	if err != nil {
-		log.Printf("Ошибка создания файла скрипта: %v\n", err)
-		return err
-	}
-
-	if err := tsign.Execute(&strbuffer, folders); err != nil {
-		log.Println("Ошибка обрабтки шаблона rename:", err)
-	}
-
-	buf, err = ToCP866(strbuffer.String())
-	if err != nil {
-		log.Printf("Ошибка конвертации CP866: %v\n", err)
-		return err
-	}
-	fsign.WriteString(buf)
-	strbuffer.Reset()
-	/**/
-
-	/* fcrypt */
-	fcrypt, err := os.Create("crypt440.sc")
-	defer fcrypt.Close()
-	if err != nil {
-		log.Printf("Ошибка создания файла скрипта: %v\n", err)
-		return err
-	}
-
-	if err := tcrypt.Execute(&strbuffer, folders); err != nil {
-		log.Println("Ошибка обрабтки шаблона rename:", err)
-	}
-
-	buf, err = ToCP866(strbuffer.String())
-	if err != nil {
-		log.Printf("Ошибка конвертации CP866: %v\n", err)
-		return err
-	}
-	fcrypt.WriteString(buf)
-	strbuffer.Reset()
-	/**/
-
-	/* signarj */
-	fsignarj, err := os.Create("signarj.sc")
-	defer fsignarj.Close()
-	if err != nil {
-		log.Printf("Ошибка создания файла скрипта: %v\n", err)
-		return err
-	}
-
-	if err := tsignarj.Execute(&strbuffer, folders); err != nil {
-		log.Println("Ошибка обрабтки шаблона rename:", err)
-	}
-
-	buf, err = ToCP866(strbuffer.String())
-	if err != nil {
-		log.Printf("Ошибка конвертации CP866: %v\n", err)
-		return err
-	}
-	fsignarj.WriteString(buf)
 	strbuffer.Reset()
 	/**/
 
