@@ -33,5 +33,5 @@
 	CD %SCRIPT_DIR%
 	del /s/q %SCRIPT_DIR%\ARJ
 	cls
-	artana.exe -src="%SCRIPT_DIR%\files" -dst="%SCRIPT_DIR%\OUT" -signatura="C:\temp" -findex=1
+	artana.exe -src="%SCRIPT_DIR%\files" -dst="%SCRIPT_DIR%\OUT" -findex=1
 	%SCRIPT_DIR%\ZDATA\mv.cmd
